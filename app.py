@@ -12,29 +12,33 @@
 # =============================================================
 
 import streamlit as st
+import joblib
 import pandas as pd
 import pickle
+import numpy as np
 
 st.set_page_config(
-    page_title="Prediksi Kelulusan Mahasiswa",
-    page_icon="🎓",
-    layout="centered"
+page_title="Prediksi Kelulusan Mahasiswa",
+@@ -8,36 +11,81 @@
 )
 
 st.title("🎓 Prediksi Kelulusan Mahasiswa")
 st.markdown("**Dataset**: UCI Student Performance | **Kelompok 2 Machine Learning**")
+st.markdown("Aplikasi prediksi kelulusan mahasiswa berdasarkan nilai menggunakan Machine Learning.")
 st.divider()
 
-# ── Akurasi ───────────────────────────────────────────────
+# Akurasi dari hasil training di Colab
 acc_nb = 78.46
 acc_dt = 86.15
 acc_lr = 90.00
 
 # ── Bar Chart ─────────────────────────────────────────────
+# ── Akurasi Model (dari Colab) ────────────────────────────
 st.subheader("📊 Perbandingan Akurasi Model")
 
 chart_data = pd.DataFrame({
     "Akurasi (%)": [acc_nb, acc_dt, acc_lr]
+    "Akurasi (%)": [78.46, 86.15, 90.00]
 }, index=["Naive Bayes", "Decision Tree", "Logistic Regression"])
 
 st.bar_chart(chart_data, color="#1E90FF")
@@ -47,114 +51,72 @@ hasil = pd.DataFrame({
     "Accuracy (%)": [acc_nb, acc_dt, acc_lr]
 }).sort_values(by="Accuracy (%)", ascending=False).reset_index(drop=True)
 
+    "Model": ["Logistic Regression", "Decision Tree", "Naive Bayes"],
+    "Accuracy (%)": [90.00, 86.15, 78.46]
+}).reset_index(drop=True)
 hasil.index += 1
 st.dataframe(hasil, use_container_width=True)
 
+# ── Model Terbaik ─────────────────────────────────────────
 best = hasil.iloc[0]
 st.success(f"✅ Model terbaik: **{best['Model']}** dengan akurasi **{best['Accuracy (%)']}%**")
-st.caption("G3 ≥ 10 → Lulus | G3 < 10 → Tidak Lulus")
-
 st.divider()
 
-# ── Load Model ────────────────────────────────────────────
+# ── Prediksi ─────────────────────────────────────────────
+st.subheader("🔍 Coba Prediksi Nilai Mahasiswa")
+
 @st.cache_resource
 def load_models():
-    with open("model_nb.pkl", "rb") as f:
-        nb = pickle.load(f)
-    with open("model_dt.pkl", "rb") as f:
-        dt = pickle.load(f)
-    with open("model_lr.pkl", "rb") as f:
-        lr = pickle.load(f)
+    nb = joblib.load("model_nb.pkl")
+    dt = joblib.load("model_dt.pkl")
+    lr = joblib.load("model_lr.pkl")
     with open("label_encoders.pkl", "rb") as f:
-        le = pickle.load(f)
-    return nb, dt, lr, le
+        encoders = pickle.load(f)
+    return nb, dt, lr, encoders
 
-nb_model, dt_model, lr_model, label_encoders = load_models()
+nb_model, dt_model, lr_model, encoders = load_models()
 
-# ── Input Prediksi ────────────────────────────────────────
-st.subheader("🔮 Prediksi Kelulusan")
+model_pilihan = st.selectbox("Pilih Model", ["Logistic Regression", "Decision Tree", "Naive Bayes"])
 
-col1, col2, col3 = st.columns(3)
-
+col1, col2 = st.columns(2)
 with col1:
-    school    = st.selectbox("Sekolah", ["GP", "MS"])
-    sex       = st.selectbox("Jenis Kelamin", ["F", "M"])
-    age       = st.slider("Usia", 15, 22, 17)
-    address   = st.selectbox("Tempat Tinggal", ["U", "R"])
-    famsize   = st.selectbox("Ukuran Keluarga", ["LE3", "GT3"])
-    Pstatus   = st.selectbox("Status Orang Tua", ["T", "A"])
-    Medu      = st.slider("Pendidikan Ibu (0-4)", 0, 4, 2)
-    Fedu      = st.slider("Pendidikan Ayah (0-4)", 0, 4, 2)
-    Mjob      = st.selectbox("Pekerjaan Ibu", ["teacher", "health", "services", "at_home", "other"])
-    Fjob      = st.selectbox("Pekerjaan Ayah", ["teacher", "health", "services", "at_home", "other"])
-    reason    = st.selectbox("Alasan Pilih Sekolah", ["home", "reputation", "course", "other"])
-
+    g1 = st.number_input("Nilai G1 (Semester 1)", min_value=0, max_value=20, value=10)
 with col2:
-    guardian   = st.selectbox("Wali", ["mother", "father", "other"])
-    traveltime = st.slider("Waktu Perjalanan (1-4)", 1, 4, 1)
-    studytime  = st.slider("Waktu Belajar (1-4)", 1, 4, 2)
-    failures   = st.slider("Pernah Gagal (0-3)", 0, 3, 0)
-    schoolsup  = st.selectbox("Dukungan Sekolah", ["yes", "no"])
-    famsup     = st.selectbox("Dukungan Keluarga", ["yes", "no"])
-    paid       = st.selectbox("Kelas Berbayar", ["yes", "no"])
-    activities = st.selectbox("Ekstrakurikuler", ["yes", "no"])
-    nursery    = st.selectbox("Pernah TK", ["yes", "no"])
-    higher     = st.selectbox("Ingin Lanjut S2", ["yes", "no"])
-    internet   = st.selectbox("Akses Internet", ["yes", "no"])
+    g2 = st.number_input("Nilai G2 (Semester 2)", min_value=0, max_value=20, value=10)
 
-with col3:
-    romantic  = st.selectbox("Pacaran", ["yes", "no"])
-    famrel    = st.slider("Hub. Keluarga (1-5)", 1, 5, 3)
-    freetime  = st.slider("Waktu Luang (1-5)", 1, 5, 3)
-    goout     = st.slider("Keluar Teman (1-5)", 1, 5, 3)
-    Dalc      = st.slider("Alkohol Kerja (1-5)", 1, 5, 1)
-    Walc      = st.slider("Alkohol Akhir Pekan (1-5)", 1, 5, 1)
-    health    = st.slider("Kesehatan (1-5)", 1, 5, 3)
-    absences  = st.number_input("Jumlah Absen", 0, 32, 0)
-    G1        = st.slider("Nilai G1 (0-20)", 0, 20, 10)
-    G2        = st.slider("Nilai G2 (0-20)", 0, 20, 10)
-    model_choice = st.selectbox(
-        "Pilih Model",
-        ["Naive Bayes", "Decision Tree", "Logistic Regression"],
-        index=2
-    )
-
-if st.button("Prediksi Sekarang", use_container_width=True):
-    raw = {
-        "school": school, "sex": sex, "age": age, "address": address,
-        "famsize": famsize, "Pstatus": Pstatus, "Medu": Medu, "Fedu": Fedu,
-        "Mjob": Mjob, "Fjob": Fjob, "reason": reason, "guardian": guardian,
-        "traveltime": traveltime, "studytime": studytime, "failures": failures,
-        "schoolsup": schoolsup, "famsup": famsup, "paid": paid,
-        "activities": activities, "nursery": nursery, "higher": higher,
-        "internet": internet, "romantic": romantic, "famrel": famrel,
-        "freetime": freetime, "goout": goout, "Dalc": Dalc, "Walc": Walc,
-        "health": health, "absences": absences, "G1": G1, "G2": G2,
+if st.button("Prediksi", use_container_width=True, type="primary"):
+    # Buat input dengan nilai default untuk fitur lain
+    import pandas as pd
+    
+    # Nilai default (rata-rata/umum)
+    input_data = {
+        'school': 0, 'sex': 0, 'age': 17, 'address': 1, 'famsize': 0,
+        'Pstatus': 0, 'Medu': 2, 'Fedu': 2, 'Mjob': 0, 'Fjob': 0,
+        'reason': 0, 'guardian': 0, 'traveltime': 1, 'studytime': 2,
+        'failures': 0, 'schoolsup': 0, 'famsup': 1, 'paid': 0,
+        'activities': 0, 'nursery': 1, 'higher': 1, 'internet': 1,
+        'romantic': 0, 'famrel': 4, 'freetime': 3, 'goout': 3,
+        'Dalc': 1, 'Walc': 1, 'health': 3, 'absences': 0,
+        'G1': g1, 'G2': g2
     }
 
-    input_df = pd.DataFrame([raw])
+    df_input = pd.DataFrame([input_data])
 
-    for col, le in label_encoders.items():
-        if col in input_df.columns:
-            input_df[col] = le.transform(input_df[col])
-
-    model_map = {
-        "Naive Bayes": nb_model,
-        "Decision Tree": dt_model,
-        "Logistic Regression": lr_model,
-    }
-    chosen = model_map[model_choice]
-    prediction = chosen.predict(input_df)[0]
-
-    if prediction == 1:
-        st.success("Prediksi: LULUS")
+    if model_pilihan == "Logistic Regression":
+        model = lr_model
+    elif model_pilihan == "Decision Tree":
+        model = dt_model
     else:
-        st.error("Prediksi: TIDAK LULUS")
+        model = nb_model
 
-# ── Footer ────────────────────────────────────────────────
-st.divider()
-st.caption(
-    "Kelompok 2 · Machine Learning · UCI Student Performance Dataset | "
-    "Diadaptasi dari Explore-AI/classification-predict-streamlit-template: "
-    "https://github.com/Explore-AI/classification-predict-streamlit-template"
-)
+    pred = model.predict(df_input)[0]
+
+    st.markdown("### Hasil Prediksi")
+    if pred == 1:
+        st.success("✅ **LULUS** — Mahasiswa diprediksi lulus (G3 ≥ 10)")
+        st.balloons()
+    else:
+        st.error("❌ **TIDAK LULUS** — Mahasiswa diprediksi tidak lulus (G3 < 10)")
+
+st.caption("G3 ≥ 10 → Lulus | G3 < 10 → Tidak Lulus")
+st.caption("G3 ≥ 10 → Lulus | G3 < 10 → Tidak Lulus | Dataset: UCI Student Performance")
